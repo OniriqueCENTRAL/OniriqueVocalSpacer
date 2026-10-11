@@ -10,7 +10,7 @@ on:
 env:
   TARGET: OniriqueVocalSpacer            # cible CMake
   PRODUCT: ONIRIQUE VOCAL SPACER          # PRODUCT_NAME du plugin
-  SLUG: onirique-vocalspacer                      # identifiant du plugin dans ONIRIQUE CENTRAL
+  SLUG: onirique-vocal-spacer                     # identifiant du plugin dans ONIRIQUE CENTRAL
 
 jobs:
   mac:
