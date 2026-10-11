@@ -1719,6 +1719,11 @@ OniriqueVocalSpacerAudioProcessorEditor::OniriqueVocalSpacerAudioProcessorEditor
     addAndMakeVisible (veils);   // ajoutée en dernier : au-dessus des modules, sous les menus ouverts ensuite
     processor.apvts.state.setProperty ("uiWidth", getWidth(), nullptr);
 
+    // Licence : pastille et page d'activation, par-dessus tout le reste.
+    licenseOverlay = std::make_unique<onirique::license::Overlay> ("ONIRIQUE VOCAL SPACER", processor.license);
+    addAndMakeVisible (*licenseOverlay);
+    resized();
+
     startTimerHz (60);
 }
 
@@ -1789,6 +1794,9 @@ void OniriqueVocalSpacerAudioProcessorEditor::timerCallback()
 
 void OniriqueVocalSpacerAudioProcessorEditor::resized()
 {
+    if (licenseOverlay != nullptr)
+        licenseOverlay->fit (getLocalBounds(), scale(), { 590, 22, 248, 26 });
+
     const float u = scale();
     const float W = (float) getWidth(), H = (float) getHeight();
     const float m = 22.0f * u, gap = 16.0f * u;

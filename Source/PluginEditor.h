@@ -1,5 +1,6 @@
 #pragma once
 
+#include "License/LicenseOverlay.h"
 #include "PluginProcessor.h"
 
 namespace onirique::ui
@@ -442,6 +443,8 @@ private:
         Overlay() { setInterceptsMouseClicks (false, false); }
         void paint (juce::Graphics& g) override { if (draw) draw (g); }
     } veils;
+
+    std::unique_ptr<onirique::license::Overlay> licenseOverlay;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OniriqueVocalSpacerAudioProcessorEditor)
 };

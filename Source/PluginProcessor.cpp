@@ -57,6 +57,8 @@ bool OniriqueVocalSpacerAudioProcessor::isBusesLayoutSupported (const BusesLayou
 
 void OniriqueVocalSpacerAudioProcessor::prepareToPlay (double sr, int samplesPerBlock)
 {
+    license.refresh();   // beaucoup de DAW rappellent prepareToPlay juste avant un export
+
     // Toute l'allocation se fait ici ; processBlock n'alloue rien. Latence nulle.
     for (auto& v : scCopy) v.assign ((size_t) std::max (samplesPerBlock, 8192), 0.0f);
     scGuard.prepare (sr);
@@ -105,6 +107,7 @@ void OniriqueVocalSpacerAudioProcessor::processBlock (juce::AudioBuffer<float>& 
     if (scCh > 0) vocalTap.push (sc[0], scCh > 1 ? sc[1] : nullptr, total);   // afficheur : voix
     chain.process (ch, numCh, sc, scCh, total);
     outputTap.push (ch[0], ch[1], total);                                  // afficheur : instrumental de sortie
+    license.process (main, getSampleRate(), isNonRealtime());
 
     // crête de sortie + correction d'Auto Gain pour l'interface
     float pk = 0.0f;
