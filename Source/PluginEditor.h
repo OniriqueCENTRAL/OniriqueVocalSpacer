@@ -30,6 +30,11 @@ float editorScale (const juce::Component&);
 // trait lumineux : plusieurs passes de plus en plus larges et transparentes sous le trait net
 void strokeGlow (juce::Graphics&, const juce::Path&, juce::Colour, float width, float intensity);
 
+// ombre portée d'un rectangle arrondi (corner >= 0) ou d'une ellipse (corner < 0) : même rendu que
+// juce::DropShadow::drawForPath, mais le flou est calculé une seule fois par forme puis gardé en cache
+// (sur Mac, Core Graphics redessine de grandes zones à chaque image : recalculer les flous y faisait ramer l'interface)
+void drawCachedShadow (juce::Graphics&, const juce::DropShadow&, juce::Rectangle<float> shape, float corner);
+
 // approche exponentielle d'une valeur animée ; renvoie true tant qu'elle bouge
 inline bool approach (float& v, float target, float k) noexcept
 {
@@ -357,6 +362,11 @@ private:
     void paintHeader (juce::Graphics&);
     void paintStar (juce::Graphics&, juce::Point<float> c, float r, float alpha);
     void paintScStatus (juce::Graphics&);
+    // fond et cartes ne bougent pas : dessinés une fois (à la résolution réelle de l'écran) dans deux images,
+    // recopiées à chaque image ; seuls l'en-tête animé, les points des cartes et les témoins sont redessinés
+    void paintBackdrop (juce::Graphics&);
+    void paintCards (juce::Graphics&);
+    void rebuildLayers (float pixelScale);
 
     OniriqueVocalSpacerAudioProcessor& processor;
     OniriqueLookAndFeel lnf;
@@ -429,6 +439,8 @@ private:
     std::vector<Animated*> animated;
     std::vector<Section> sections;
     juce::Image logo, logoScaled, logoGlow;
+    juce::Image backdropLayer, cardsLayer;   // vidées au redimensionnement
+    float layersScale = 0.0f;
     juce::Rectangle<float> logoRect, signalRect, overRect, scStatusRect, scMeterTitle;
     std::vector<std::pair<juce::Point<float>, float>> stars;
     double clock = 0.0;
