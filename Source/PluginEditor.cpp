@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 #include "OniriqueKnob.h"
+#include "OniriqueWindowSize.h"
 #include <BinaryData.h>
 #include <array>
 #include <map>
@@ -1699,7 +1700,11 @@ OniriqueVocalSpacerAudioProcessorEditor::OniriqueVocalSpacerAudioProcessorEditor
 
     // redimensionnable, proportions verrouillées. La taille mémorisée est lue AVANT setResizeLimits(),
     // qui déclenche un resized() à la taille minimale.
-    const int w = juce::jlimit (kMinW, kMaxW, (int) processor.apvts.state.getProperty ("uiWidth", 1280));
+    // taille d'ouverture : la règle commune des plugins ONIRIQUE (OniriqueWindowSize.h)
+    const int w = onirique::window::openingSize (processor.apvts.state, "ONIRIQUE VOCAL SPACER",
+                                                 { 1280, juce::roundToInt (1280.0f * kBaseH / kBaseW) },
+                                                 { kMinW, juce::roundToInt ((float) kMinW * kBaseH / kBaseW) },
+                                                 { kMaxW, juce::roundToInt ((float) kMaxW * kBaseH / kBaseW) }).x;
     setResizable (true, true);
     setResizeLimits (kMinW, juce::roundToInt (kMinW * kBaseH / kBaseW), kMaxW, juce::roundToInt (kMaxW * kBaseH / kBaseW));
     if (auto* c = getConstrainer()) c->setFixedAspectRatio ((double) (kBaseW / kBaseH));
@@ -1707,7 +1712,7 @@ OniriqueVocalSpacerAudioProcessorEditor::OniriqueVocalSpacerAudioProcessorEditor
     restoringSize = false;
     veils.draw = [this] (juce::Graphics& g) { paintVeils (g); };
     addAndMakeVisible (veils);   // ajoutée en dernier : au-dessus des modules, sous les menus ouverts ensuite
-    processor.apvts.state.setProperty ("uiWidth", getWidth(), nullptr);
+    onirique::window::remember (processor.apvts.state, getWidth(), getHeight());
 
     // Licence : pastille et page d'activation, par-dessus tout le reste.
     licenseOverlay = std::make_unique<onirique::license::Overlay> ("ONIRIQUE VOCAL SPACER", processor.license);
@@ -1720,6 +1725,7 @@ OniriqueVocalSpacerAudioProcessorEditor::OniriqueVocalSpacerAudioProcessorEditor
 OniriqueVocalSpacerAudioProcessorEditor::~OniriqueVocalSpacerAudioProcessorEditor()
 {
     stopTimer();
+    onirique::window::rememberOnThisComputer ("ONIRIQUE VOCAL SPACER", getWidth(), getHeight());
     tooltipWindow.setLookAndFeel (nullptr);
     setLookAndFeel (nullptr);
 }
@@ -1934,7 +1940,7 @@ void OniriqueVocalSpacerAudioProcessorEditor::resized()
     overRect = { o.getRight() - 84.0f * u, o.getY() + 10.0f * u, 64.0f * u, 18.0f * u };
 
     if (! restoringSize)
-        processor.apvts.state.setProperty ("uiWidth", getWidth(), nullptr);   // taille mémorisée avec le projet
+        onirique::window::remember (processor.apvts.state, getWidth(), getHeight());   // taille mémorisée avec le projet
     veils.setBounds (getLocalBounds());
 }
 
