@@ -22,6 +22,7 @@
 //                     licenseOverlay->fit (getLocalBounds(), scale, bar.getPillArea(), Justification::centredRight);
 //      bar.setBrand (largeur, dessin) : le titre du plugin (son logo, son nom) à la place de « ONIRIQUE » + nom.
 //      bar.setWithoutBrand() : sans marque (le nom est déjà sur la façade) ; étroite, la barre tient sur une rangée.
+//      bar.setWithoutZoom() : dans une application (pas un plugin), le menu ⋯ ne propose pas la taille de la fenêtre.
 //==============================================================================
 namespace onirique::nuit
 {
@@ -1048,7 +1049,19 @@ public:
         repaint();
     }
 
-    int idealHeight() const   { return 6 + (clipboard ? 5 : 3) * 33 + 11 + 70 + 6; }
+    int idealHeight() const   { return 6 + (clipboard ? 5 : 3) * 33 + (withZoom ? 11 + 70 : 0) + 6; }
+
+    /** Sans la taille de la fenêtre (une application, qui a la sienne). */
+    void setZoomVisible (bool shouldShow)
+    {
+        withZoom = shouldShow;
+
+        for (auto& zoom : zooms)
+            zoom.setVisible (withZoom);
+
+        resized();
+        repaint();
+    }
 
     void paint (Graphics& g) override
     {
@@ -1057,6 +1070,9 @@ public:
         g.fillRoundedRectangle (r, 14.0f);
         g.setColour (colours::rose.withAlpha (0.14f));
         g.drawRoundedRectangle (r.reduced (0.5f), 14.0f, 1.0f);
+
+        if (! withZoom)
+            return;
 
         g.setColour (colours::rose.withAlpha (0.1f));
         g.fillRect (separator.toFloat());
@@ -1112,7 +1128,7 @@ private:
 
     PresetBank& bank;
     Fonts fonts;
-    bool clipboard;
+    bool clipboard, withZoom = true;
 
     MenuItem copySlot { "Copy A to B", Icon::copy }, copySettings { "Copy Settings", Icon::copy },
              pasteSettings { "Paste Settings", Icon::paste }, importPresets { String::fromUTF8 ("Import Presets…"), Icon::import },
@@ -1235,6 +1251,9 @@ public:
         noBrand = true;
         resized();
     }
+
+    /** Dans une application plutôt qu'un plugin : la fenêtre a sa propre taille, le menu ⋯ ne la propose pas. */
+    void setWithoutZoom()   { menu.setZoomVisible (false); layoutPanels(); }
 
     /** La hauteur de cette barre, en points : celle de heightFor(), une seule rangée sans marque. */
     int getBarHeight() const   { return twoRows() ? heightFor (width) : 50; }
