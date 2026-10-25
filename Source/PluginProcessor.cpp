@@ -10,6 +10,8 @@ OniriqueVocalSpacerAudioProcessor::OniriqueVocalSpacerAudioProcessor()
                           .withInput  ("Sidechain", juce::AudioChannelSet::stereo(), true)),   // la voix (VOCAL POCKET)
       apvts (*this, nullptr, "STATE", createLayout())
 {
+    apvts.state.setProperty ("preset", "Init", nullptr);   // l'état de départ : les valeurs par défaut
+    spacer::importOldUserPresets (presets);
 }
 
 SpacerChain::Params OniriqueVocalSpacerAudioProcessor::readParams() const noexcept
@@ -125,7 +127,9 @@ juce::AudioProcessorEditor* OniriqueVocalSpacerAudioProcessor::createEditor()
 
 void OniriqueVocalSpacerAudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml())
+    auto state = apvts.copyState();
+    presets.writeState (state);   // le côté A/B écouté, et l'autre
+    if (auto xml = state.createXml())
         copyXmlToBinary (*xml, dest);
 }
 
@@ -134,8 +138,12 @@ void OniriqueVocalSpacerAudioProcessor::setStateInformation (const void* data, i
     if (auto xml = getXmlFromBinary (data, size))
         if (xml->hasTagName (apvts.state.getType()))
         {
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
-            presets.takeSnapshot();   // l'état rechargé sert de référence pour l'indicateur "modifié"
+            auto state = juce::ValueTree::fromXml (*xml);
+            // un projet enregistré avec l'ancienne barre : le nom de son preset suit
+            if (! state.hasProperty ("preset") && state.hasProperty ("presetName"))
+                state.setProperty ("preset", state["presetName"], nullptr);
+            presets.readState (state);
+            apvts.replaceState (state);
         }
 }
 

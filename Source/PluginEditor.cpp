@@ -854,199 +854,6 @@ void SegmentSelector::paint (juce::Graphics& g)
     }
 }
 
-//==============================================================================
-PresetBar::PresetBar (onirique::PresetManager& p) : pm (p)
-{
-    addChildComponent (editor);
-    editor.setJustification (juce::Justification::centred);
-    editor.setColour (juce::TextEditor::backgroundColourId, ui::night.withAlpha (0.9f));
-    editor.setColour (juce::TextEditor::textColourId, ui::mist);
-    editor.setColour (juce::TextEditor::outlineColourId, ui::ember);
-    editor.setColour (juce::TextEditor::focusedOutlineColourId, ui::ember);
-    editor.setColour (juce::TextEditor::highlightColourId, ui::ember.withAlpha (0.4f));
-    editor.setColour (juce::CaretComponent::caretColourId, ui::bone);
-    editor.setTextToShowWhenEmpty ("Preset name", ui::haze);
-    editor.onReturnKey = [this] { endSave (true); };
-    editor.onEscapeKey = [this] { endSave (false); };
-    editor.onFocusLost = [this] { endSave (false); };
-    shownName = pm.getCurrentName();
-}
-
-void PresetBar::resized()
-{
-    const auto r = getLocalBounds().toFloat();
-    const float h = r.getHeight();
-    auto rest = r;
-    zones[save] = rest.removeFromRight (h * 2.1f);
-    rest.removeFromRight (h * 0.2f);
-    zones[prev] = rest.removeFromLeft (h);
-    zones[next] = rest.removeFromRight (h);
-    zones[name] = rest;
-    editor.setBounds (zones[name].reduced (2.0f, h * 0.14f).toNearestInt());
-    editor.setFont (ui::font (ui::Face::body, h * 0.40f, true));
-}
-
-PresetBar::Zone PresetBar::zoneAt (juce::Point<float> p) const noexcept
-{
-    for (int z = 0; z < 4; ++z) if (zones[z].contains (p)) return (Zone) z;
-    return none;
-}
-
-void PresetBar::tick()
-{
-    bool changed = false;
-    for (int z = 0; z < 4; ++z) changed |= ui::approach (glow[z], hover == z ? 1.0f : 0.0f, 0.2f);
-    if ((++frame % 10) == 0)
-    {
-        const auto n = pm.getCurrentName();
-        const bool mod = pm.isModified();
-        if (n != shownName || mod != modified) { shownName = n; modified = mod; changed = true; }
-    }
-    if (changed) repaint();
-}
-
-void PresetBar::mouseMove (const juce::MouseEvent& e)
-{
-    const auto z = zoneAt (e.position);
-    if (z != hover) { hover = z; repaint(); }
-}
-
-void PresetBar::mouseExit (const juce::MouseEvent&) { hover = none; }
-
-void PresetBar::mouseDown (const juce::MouseEvent& e)
-{
-    switch (zoneAt (e.position))
-    {
-        case prev: pm.step (-1); break;
-        case next: pm.step (1); break;
-        case name: showMenu(); break;
-        case save: startSave(); break;
-        default: break;
-    }
-    shownName = pm.getCurrentName();
-    modified = pm.isModified();
-    repaint();
-}
-
-void PresetBar::showMenu()
-{
-    const auto entries = pm.list();
-    const auto current = pm.getCurrentName();
-    juce::PopupMenu menu;
-    bool userHeader = false;
-    menu.addSectionHeader ("FACTORY");
-    for (int i = 0; i < (int) entries.size(); ++i)
-    {
-        const auto& e = entries[(size_t) i];
-        if (! e.factory && ! userHeader) { menu.addSectionHeader ("USER"); userHeader = true; }
-        menu.addItem (i + 1, e.name, true, e.name == current);
-    }
-    menu.addSeparator();
-    menu.addItem (1000, "Save as new preset...");
-    bool currentIsUser = false;
-    for (const auto& e : entries) if (! e.factory && e.name == current) currentIsUser = true;
-    menu.addItem (1001, "Delete \"" + current + "\"", currentIsUser);
-    menu.addItem (1002, "Open presets folder");
-
-    menu.setLookAndFeel (&getLookAndFeel());   // sinon JUCE juge la fenêtre opaque avec le style système (coins blancs)
-    juce::Component::SafePointer<PresetBar> self (this);
-    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMinimumWidth (getWidth())
-                            .withParentComponent (findParentComponentOfClass<juce::AudioProcessorEditor>()),
-                        [self, entries] (int r)
-                        {
-                            if (self == nullptr || r == 0) return;
-                            auto& bar = *self;
-                            if (r >= 1 && r <= (int) entries.size()) bar.pm.load (entries[(size_t) (r - 1)]);
-                            else if (r == 1000) bar.startSave();
-                            else if (r == 1001)
-                            {
-                                for (const auto& e : entries)
-                                    if (! e.factory && e.name == bar.pm.getCurrentName()) bar.pm.remove (e);
-                                bar.pm.load (entries.front());   // retour sur Init
-                            }
-                            else if (r == 1002) onirique::PresetManager::folder().startAsProcess();
-                            bar.repaint();
-                        });
-}
-
-void PresetBar::startSave()
-{
-    editor.setText (shownName == "Init" ? juce::String() : shownName, false);
-    editor.setVisible (true);
-    editor.selectAll();
-    editor.grabKeyboardFocus();
-    repaint();
-}
-
-void PresetBar::endSave (bool commit)
-{
-    if (! editor.isVisible()) return;
-    const auto text = editor.getText();
-    editor.setVisible (false);
-    if (commit) pm.save (text);
-    shownName = pm.getCurrentName();
-    modified = pm.isModified();
-    repaint();
-}
-
-void PresetBar::paint (juce::Graphics& g)
-{
-    const auto r = getLocalBounds().toFloat().reduced (1.0f);
-    const float h = r.getHeight(), u = h / 40.0f;
-
-    // conteneur : précédent | nom | suivant
-    const auto box = zones[prev].getUnion (zones[next]).reduced (0.0f, 1.0f);
-    g.setColour (juce::Colours::black.withAlpha (0.36f));
-    g.fillRoundedRectangle (box, box.getHeight() * 0.5f);
-    g.setColour (ui::line.interpolatedWith (ui::ember, 0.6f * glow[name]));
-    g.drawRoundedRectangle (box.reduced (0.5f), box.getHeight() * 0.5f, std::max (1.0f, 1.2f * u));
-
-    for (int z : { (int) prev, (int) next })
-    {
-        const auto c = zones[z].getCentre();
-        const float d = (z == prev ? -1.0f : 1.0f) * 4.0f * u;
-        juce::Path chev;
-        chev.startNewSubPath (c.x - d, c.y - 6.0f * u);
-        chev.lineTo (c.x + d, c.y);
-        chev.lineTo (c.x - d, c.y + 6.0f * u);
-        g.setColour (ui::haze.interpolatedWith (ui::bone, glow[z]));
-        g.strokePath (chev, juce::PathStrokeType (std::max (1.3f, 2.0f * u), juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-    }
-
-    if (! editor.isVisible())
-    {
-        auto nr = zones[name].reduced (4.0f * u, 0.0f);
-        g.setColour (ui::haze.withAlpha (0.8f));
-        g.setFont (ui::font (ui::Face::mono, 9.0f * u, false, 0.1f));
-        g.drawText ("PRESET", nr.removeFromTop (h * 0.42f).withTrimmedTop (h * 0.10f), juce::Justification::centredBottom, false);
-        const juce::String txt = shownName + (modified ? " *" : "");
-        g.setColour (ui::mist.interpolatedWith (ui::bone, glow[name]));
-        g.setFont (ui::fitFont (ui::Face::body, h * 0.36f, nr.getWidth() - 18.0f * u, txt, true, 0.04f));
-        g.drawText (txt, nr.withTrimmedBottom (h * 0.08f), juce::Justification::centredTop, false);
-        // petit triangle : la liste s'ouvre au clic
-        const float tx = zones[name].getRight() - 8.0f * u, ty = zones[name].getCentreY();
-        juce::Path tri;
-        tri.addTriangle (tx - 4.0f * u, ty - 2.0f * u, tx + 4.0f * u, ty - 2.0f * u, tx, ty + 3.0f * u);
-        g.setColour (ui::haze.interpolatedWith (ui::ember, glow[name]));
-        g.fillPath (tri);
-    }
-
-    // SAVE
-    const auto s = zones[save].reduced (0.0f, 1.0f);
-    juce::Path sp;
-    sp.addRoundedRectangle (s, s.getHeight() * 0.5f);
-    ui::strokeGlow (g, sp, ui::ember, 1.2f * u, glow[save] * 0.8f);
-    g.setColour (juce::Colours::black.withAlpha (0.36f));
-    g.fillPath (sp);
-    g.setColour (ui::ember.withAlpha (0.18f * glow[save]));
-    g.fillPath (sp);
-    g.setColour (ui::line.interpolatedWith (ui::ember, glow[save]));
-    g.strokePath (sp, juce::PathStrokeType (std::max (1.0f, 1.2f * u)));
-    g.setColour (ui::haze.interpolatedWith (ui::bone, glow[save]));
-    g.setFont (ui::fitFont (ui::Face::body, h * 0.36f, s.getWidth() - 10.0f * u, "SAVE", true, 0.16f));
-    g.drawText ("SAVE", s, juce::Justification::centred, false);
-}
-
 
 //==============================================================================
 void LevelMeter::tick()
@@ -1685,8 +1492,8 @@ void RestoreDisplay::paint (juce::Graphics& g)
 }
 
 //==============================================================================
-OniriqueVocalSpacerAudioProcessorEditor::OniriqueVocalSpacerAudioProcessorEditor (OniriqueVocalSpacerAudioProcessor& p)
-    : AudioProcessorEditor (&p), processor (p)
+SpacerView::SpacerView (OniriqueVocalSpacerAudioProcessor& p)
+    : processor (p)
 {
     tooltipWindow.setLookAndFeel (&lnf);
     setLookAndFeel (&lnf);   // menus (presets) et champs de texte dans le style du plugin
@@ -1699,11 +1506,11 @@ OniriqueVocalSpacerAudioProcessorEditor::OniriqueVocalSpacerAudioProcessorEditor
     }
     for (auto* c : std::initializer_list<juce::Component*> { &field, &pocketDisplay, &modeSel, &targetSel, &speedSel, &rangeLoV, &rangeHiV,
                                                              &scMeter, &listenButton, &restoreDisplay, &inMeter, &outMeter,
-                                                             &autoButton, &bypassButton, &presetBar })
+                                                             &autoButton })
         addAndMakeVisible (c);
     for (auto* a : std::initializer_list<Animated*> { &field, &pocketDisplay, &modeSel, &targetSel, &speedSel, &rangeLoV, &rangeHiV,
                                                       &scMeter, &listenButton, &restoreDisplay, &inMeter, &outMeter,
-                                                      &autoButton, &bypassButton, &presetBar })
+                                                      &autoButton })
         animated.push_back (a);
 
     rangeLoV.setPrefix ("LO ");
@@ -1725,55 +1532,27 @@ OniriqueVocalSpacerAudioProcessorEditor::OniriqueVocalSpacerAudioProcessorEditor
 
     autoButton.setTooltip ("Auto Gain: keeps the perceived loudness the same before and after the processing, "
                            "so you judge the space made for the voice, not a volume change.");
-    bypassButton.setTooltip ("Bypass the whole plugin (click-free).");
     listenButton.setTooltip ("Listen: hear only what the pocket removes from the instrumental "
                              "(it should sound like a thin ghost of the vocal range, never like a whole instrument).");
     autoAttachment   = std::make_unique<ButtonAttachment> (processor.apvts, ids::autoGain, autoButton);
-    bypassAttachment = std::make_unique<ButtonAttachment> (processor.apvts, ids::bypass, bypassButton);
     listenAttachment = std::make_unique<ButtonAttachment> (processor.apvts, ids::pocketListen, listenButton);
 
-    logo = juce::ImageCache::getFromMemory (BinaryData::logo_png, BinaryData::logo_pngSize);
-
-    // redimensionnable, proportions verrouillées. La taille mémorisée est lue AVANT setResizeLimits(),
-    // qui déclenche un resized() à la taille minimale.
-    // taille d'ouverture : la règle commune des plugins ONIRIQUE (OniriqueWindowSize.h)
-    const int w = onirique::window::openingSize (processor.apvts.state, "ONIRIQUE VOCAL SPACER",
-                                                 { 1280, juce::roundToInt (1280.0f * kBaseH / kBaseW) },
-                                                 { kMinW, juce::roundToInt ((float) kMinW * kBaseH / kBaseW) },
-                                                 { kMaxW, juce::roundToInt ((float) kMaxW * kBaseH / kBaseW) }).x;
-    setResizable (true, true);
-    setResizeLimits (kMinW, juce::roundToInt (kMinW * kBaseH / kBaseW), kMaxW, juce::roundToInt (kMaxW * kBaseH / kBaseW));
-    if (auto* c = getConstrainer()) c->setFixedAspectRatio ((double) (kBaseW / kBaseH));
-    setSize (w, juce::roundToInt ((float) w * kBaseH / kBaseW));
-    restoringSize = false;
     veils.draw = [this] (juce::Graphics& g) { paintVeils (g); };
     addAndMakeVisible (veils);   // ajoutée en dernier : au-dessus des modules, sous les menus ouverts ensuite
-    onirique::window::remember (processor.apvts.state, getWidth(), getHeight());
-
-    // Licence : pastille et page d'activation, par-dessus tout le reste.
-    licenseOverlay = std::make_unique<onirique::license::Overlay> ("ONIRIQUE VOCAL SPACER", processor.license);
-    addAndMakeVisible (*licenseOverlay);
-   #if ONIRIQUE_UI_TEST
-    // essais locaux uniquement (jamais dans les versions publiées) : captures sans la page d'activation
-    if (juce::SystemStats::getEnvironmentVariable ("ONIRIQUE_UI_TEST", {}).contains ("nolicense"))
-        licenseOverlay->setVisible (false);
-   #endif
-    resized();
 
     startTimerHz (60);
 }
 
-OniriqueVocalSpacerAudioProcessorEditor::~OniriqueVocalSpacerAudioProcessorEditor()
+SpacerView::~SpacerView()
 {
     stopTimer();
-    onirique::window::rememberOnThisComputer ("ONIRIQUE VOCAL SPACER", getWidth(), getHeight());
     tooltipWindow.setLookAndFeel (nullptr);
     setLookAndFeel (nullptr);
 }
 
-float OniriqueVocalSpacerAudioProcessorEditor::scale() const noexcept { return (float) getWidth() / kBaseW; }
+float SpacerView::scale() const noexcept { return (float) getWidth() / kBaseW; }
 
-void OniriqueVocalSpacerAudioProcessorEditor::timerCallback()
+void SpacerView::timerCallback()
 {
     clock += 1.0 / 60.0;
     ++frame;
@@ -1821,15 +1600,11 @@ void OniriqueVocalSpacerAudioProcessorEditor::timerCallback()
     }
     autoButton.setCaption (cap);
 
-    // en-tête vivant : lueur du logo, signal qui parcourt la ligne, étoiles qui scintillent
-    repaint (logoRect.expanded (logoRect.getHeight() * 0.4f).getSmallestIntegerContainer());
+    // en-tête vivant : le signal qui parcourt la ligne
     repaint (signalRect.getSmallestIntegerContainer());
-    if ((frame & 1) == 0)
-        for (const auto& st : stars)
-            repaint (juce::Rectangle<float> (st.second * 2.4f, st.second * 2.4f).withCentre (st.first).getSmallestIntegerContainer());
 }
 
-void OniriqueVocalSpacerAudioProcessorEditor::resized()
+void SpacerView::resized()
 {
     backdropLayer = {};   // fond et cartes redessinés à la nouvelle taille au prochain paint()
 
@@ -1837,39 +1612,8 @@ void OniriqueVocalSpacerAudioProcessorEditor::resized()
     const float W = (float) getWidth(), H = (float) getHeight();
     const float m = 22.0f * u, gap = 16.0f * u;
 
-    // ---- en-tête : presets + BYPASS à droite
-    logoRect = { 22.0f * u, 10.0f * u, 64.0f * u * 985.0f / 895.0f, 64.0f * u };
+    // ---- en-tête, sous la barre du haut (qui tient le titre et les presets) : la chaîne de traitement, la ligne de signal
     signalRect = { 0.0f, 80.0f * u, W, 12.0f * u };
-    bypassButton.setBounds (juce::Rectangle<float> (136.0f * u, 40.0f * u).withRightX (W - m).withY (22.0f * u).toNearestInt());
-    // La pastille de licence : un bouton de l'en-tête, entre les presets et BYPASS, à leur hauteur ; sa place suit son texte.
-    const float badgeW = licenseOverlay != nullptr ? (float) licenseOverlay->pillWidth() : 0.0f;
-    const float badgeRight = (float) bypassButton.getX() / u - 10.0f;
-    if (licenseOverlay != nullptr)
-        licenseOverlay->fit (getLocalBounds(), u, juce::Rectangle<float> (badgeRight - badgeW, 22.0f, badgeW, 40.0f).toNearestInt());
-    presetBar.setBounds (juce::Rectangle<float> (400.0f * u, 40.0f * u).withRightX ((badgeRight - badgeW - 12.0f) * u).withY (22.0f * u).toNearestInt());
-
-    if (logo.isValid())
-    {
-        // logo pré-réduit (net) + version floutée pour la lueur, recalculés seulement au redimensionnement
-        const int lh = juce::jlimit (16, 600, juce::roundToInt (logoRect.getHeight() * 2.0f));
-        logoScaled = logo.rescaled (juce::roundToInt ((float) lh * 985.0f / 895.0f), lh, juce::Graphics::highResamplingQuality);
-        const int pad = lh / 4;
-        juce::Image src (juce::Image::ARGB, logoScaled.getWidth() + 2 * pad, logoScaled.getHeight() + 2 * pad, true);
-        { juce::Graphics lg (src); lg.drawImageAt (logoScaled, pad, pad); }
-        logoGlow = juce::Image (juce::Image::ARGB, src.getWidth(), src.getHeight(), true);
-        juce::ImageConvolutionKernel k (15);
-        k.createGaussianBlur ((float) lh / 22.0f);
-        k.applyToImage (logoGlow, src, src.getBounds());
-    }
-
-    stars.clear();
-    juce::Random rnd (11);
-    for (int i = 0; i < 14; ++i)
-    {
-        const float x = W * 0.40f + ((float) presetBar.getX() - 16.0f * u - W * 0.40f) * rnd.nextFloat();
-        const float y = (8.0f + 66.0f * rnd.nextFloat()) * u;
-        stars.push_back ({ { x, y }, (2.5f + 4.5f * rnd.nextFloat() * rnd.nextFloat()) * u });
-    }
 
     // ---- cartes : 0 VOCAL POCKET (rangée du haut, pleine largeur), puis 1 SPACE, 2 RESTORE, 3 INPUT, 4 AUTO GAIN, 5 OUTPUT
     const float topY = 96.0f * u, topH = 410.0f * u;
@@ -1979,71 +1723,21 @@ void OniriqueVocalSpacerAudioProcessorEditor::resized()
 
     const auto& o = sections[5].bounds;
     overRect = { o.getRight() - 84.0f * u, o.getY() + 10.0f * u, 64.0f * u, 18.0f * u };
-
-    if (! restoringSize)
-        onirique::window::remember (processor.apvts.state, getWidth(), getHeight());   // taille mémorisée avec le projet
     veils.setBounds (getLocalBounds());
 }
 
-void OniriqueVocalSpacerAudioProcessorEditor::paintStar (juce::Graphics& g, juce::Point<float> c, float r, float alpha)
-{
-    // étoile à 4 branches, reprise du logo
-    juce::Path s;
-    const float k = 0.16f * r;
-    s.startNewSubPath (c.x, c.y - r);
-    s.lineTo (c.x + k, c.y - k); s.lineTo (c.x + r, c.y); s.lineTo (c.x + k, c.y + k);
-    s.lineTo (c.x, c.y + r);     s.lineTo (c.x - k, c.y + k); s.lineTo (c.x - r, c.y); s.lineTo (c.x - k, c.y - k);
-    s.closeSubPath();
-    g.setColour (ui::ember.withAlpha (0.25f * alpha));
-    g.fillEllipse (juce::Rectangle<float> (r * 1.1f, r * 1.1f).withCentre (c));
-    g.setColour (ui::mist.withAlpha (alpha));
-    g.fillPath (s);
-}
-
-void OniriqueVocalSpacerAudioProcessorEditor::paintHeader (juce::Graphics& g)
+void SpacerView::paintHeader (juce::Graphics& g)
 {
     const float u = scale();
     const float W = (float) getWidth();
     const float t = (float) clock;
 
-    for (size_t i = 0; i < stars.size(); ++i)
+    // la chaîne de traitement (la ligne qui suivait le titre, maintenant dans la barre du haut)
     {
-        const float a = 0.15f + 0.75f * (0.5f + 0.5f * std::sin (t * (0.9f + 0.37f * (float) (i % 5)) + (float) i * 1.7f));
-        paintStar (g, stars[i].first, stars[i].second, a);
-    }
-
-    // logo : lueur braise qui respire + sigil net
-    if (logoScaled.isValid())
-    {
-        const float breathe = 0.5f + 0.5f * std::sin (t * 2.0f * kPi / 5.0f);
-        const float pad = logoRect.getHeight() / 4.0f;
-        g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-        g.setColour (ui::ember.withAlpha (0.55f + 0.35f * breathe));
-        g.drawImage (logoGlow, logoRect.expanded (pad), juce::RectanglePlacement::stretchToFit, true);
-        g.setColour (juce::Colours::white.withAlpha (0.08f + 0.10f * breathe));
-        g.drawImage (logoGlow, logoRect.expanded (pad), juce::RectanglePlacement::stretchToFit, true);
-        g.setOpacity (1.0f);
-        g.drawImage (logoScaled, logoRect, juce::RectanglePlacement::stretchToFit);
-    }
-
-    // titre + chaîne de traitement
-    {
-        const float x = logoRect.getRight() + 14.0f * u;
-        auto f1 = ui::font (ui::Face::display, 30.0f * u, true, 0.10f);
-        auto f2 = ui::font (ui::Face::display, 30.0f * u, false, 0.10f);
-        const float w1 = ui::textWidth (f1, "ONIRIQUE") + 2.0f;
-        const float w2 = ui::textWidth (f2, "VOCAL SPACER") + 2.0f;
-        const float y = 12.0f * u, hh = 36.0f * u;
-        g.setFont (f1);
-        g.setColour (ui::mist);
-        g.drawText ("ONIRIQUE", juce::Rectangle<float> (x, y, w1, hh), juce::Justification::centredLeft, false);
-        g.setColour (ui::ember);
-        g.drawText ("VOCAL SPACER", juce::Rectangle<float> (x + w1 + 10.0f * u, y, w2 + 40.0f * u, hh), juce::Justification::centredLeft, false);
-
         g.setFont (ui::font (ui::Face::mono, 11.0f * u, false, 0.12f));
         g.setColour (ui::haze.withAlpha (0.85f));
         g.drawText ("SPACE  >  VOCAL POCKET  >  RESTORE   /   ROOM FOR THE VOICE",
-                    juce::Rectangle<float> (x + 2.0f * u, 50.0f * u, 520.0f * u, 18.0f * u), juce::Justification::centredLeft, false);
+                    juce::Rectangle<float> (24.0f * u, 54.0f * u, 520.0f * u, 18.0f * u), juce::Justification::centredLeft, false);
     }
 
     // ligne de signal : filet qui s'estompe aux bords + impulsion lumineuse qui la parcourt
@@ -2070,7 +1764,7 @@ void OniriqueVocalSpacerAudioProcessorEditor::paintHeader (juce::Graphics& g)
 }
 
 // témoin du sidechain dans l'en-tête de la carte VOCAL POCKET
-void OniriqueVocalSpacerAudioProcessorEditor::paintScStatus (juce::Graphics& g)
+void SpacerView::paintScStatus (juce::Graphics& g)
 {
     const float u = scale();
     const auto r = scStatusRect;
@@ -2100,7 +1794,7 @@ void OniriqueVocalSpacerAudioProcessorEditor::paintScStatus (juce::Graphics& g)
     g.drawText (txt, tr, juce::Justification::centredLeft, false);
 }
 
-void OniriqueVocalSpacerAudioProcessorEditor::paint (juce::Graphics& g)
+void SpacerView::paint (juce::Graphics& g)
 {
     const float u = scale();
 
@@ -2153,7 +1847,7 @@ void OniriqueVocalSpacerAudioProcessorEditor::paint (juce::Graphics& g)
     }
 }
 
-void OniriqueVocalSpacerAudioProcessorEditor::rebuildLayers (float pixelScale)
+void SpacerView::rebuildLayers (float pixelScale)
 {
     layersScale = pixelScale;
     const int w = juce::jmax (1, juce::roundToInt ((float) getWidth() * pixelScale));
@@ -2175,7 +1869,7 @@ void OniriqueVocalSpacerAudioProcessorEditor::rebuildLayers (float pixelScale)
 }
 
 // ---- fond : sang -> nuit, halo braise en haut à droite
-void OniriqueVocalSpacerAudioProcessorEditor::paintBackdrop (juce::Graphics& g)
+void SpacerView::paintBackdrop (juce::Graphics& g)
 {
     const float u = scale();
     const float W = (float) getWidth(), H = (float) getHeight();
@@ -2196,7 +1890,7 @@ void OniriqueVocalSpacerAudioProcessorEditor::paintBackdrop (juce::Graphics& g)
 }
 
 // ---- cartes : verre sombre, filet fin, ombre portée, titre (le point braise est dessiné à part, il suit le module)
-void OniriqueVocalSpacerAudioProcessorEditor::paintCards (juce::Graphics& g)
+void SpacerView::paintCards (juce::Graphics& g)
 {
     const float u = scale();
 
@@ -2225,7 +1919,7 @@ void OniriqueVocalSpacerAudioProcessorEditor::paintCards (juce::Graphics& g)
 }
 
 // module coupé : voile nuit sur le contenu de sa carte (titre et bouton power restent nets)
-void OniriqueVocalSpacerAudioProcessorEditor::paintVeils (juce::Graphics& g)
+void SpacerView::paintVeils (juce::Graphics& g)
 {
     const float u = scale();
     for (const auto& s : sections)
@@ -2234,4 +1928,164 @@ void OniriqueVocalSpacerAudioProcessorEditor::paintVeils (juce::Graphics& g)
         g.setColour (ui::deep.withAlpha (0.72f * s.veil));
         g.fillRoundedRectangle (s.bounds.reduced (1.0f).withTrimmedTop (36.0f * u), 14.0f * u);
     }
+}
+
+//==============================================================================
+//  La fenêtre : la barre du haut (en points, 1280 à la taille par défaut), l'interface dessous (en unités de 1480).
+//  Le haut de l'interface, vide depuis que la barre tient le titre, passe sous la barre.
+namespace
+{
+constexpr float kBarUnits = 1280.0f, kBarH = 50.0f;   // nuit::Bar::heightFor (1280)
+constexpr float kHeaderCut = 40.0f;                    // en unités de l'interface
+constexpr float kHeightPerWidth = kBarH / kBarUnits + (kBaseH - kHeaderCut) / kBaseW;
+
+int heightFor (int width) { return juce::roundToInt ((float) width * kHeightPerWidth); }
+
+// le titre, tel qu'il était en tête de l'interface, ramené à la hauteur de la barre
+constexpr float kTitleScale = 0.6f, kOldCentreY = 38.0f, kOldLogoX = 22.0f;
+const float kOldLogoW = 64.0f * 985.0f / 895.0f;
+} // namespace
+
+OniriqueVocalSpacerAudioProcessorEditor::OniriqueVocalSpacerAudioProcessorEditor (OniriqueVocalSpacerAudioProcessor& p)
+    : AudioProcessorEditor (&p), processor (p), view (p),
+      bar (p.presets, p.apvts, "VOCAL SPACER", juce::ImageCache::getFromMemory (BinaryData::logo_png, BinaryData::logo_pngSize),
+           (int) kBarUnits, (int) kBarUnits)
+{
+    jassert (nuit::Bar::heightFor ((int) kBarUnits) == (int) kBarH);
+    setOpaque (true);
+    addAndMakeVisible (view);
+    addAndMakeVisible (bar);
+
+    // le titre de VOCAL SPACER tient la place de la marque de la barre : il n'est écrit qu'une fois
+    logo = juce::ImageCache::getFromMemory (BinaryData::logo_png, BinaryData::logo_pngSize);
+    if (logo.isValid())
+    {
+        // à la résolution d'un zoom de 200 % sur un écran Retina, une fois pour toutes
+        const int lh = 160, pad = lh / 4;
+        logo = logo.rescaled (juce::roundToInt ((float) lh * 985.0f / 895.0f), lh, juce::Graphics::highResamplingQuality);
+        juce::Image src (juce::Image::ARGB, logo.getWidth() + 2 * pad, logo.getHeight() + 2 * pad, true, juce::SoftwareImageType());
+        { juce::Graphics lg (src); lg.drawImageAt (logo, pad, pad); }
+        logoGlow = juce::Image (juce::Image::ARGB, src.getWidth(), src.getHeight(), true, juce::SoftwareImageType());
+        juce::ImageConvolutionKernel k (15);
+        k.createGaussianBlur ((float) lh / 22.0f);
+        k.applyToImage (logoGlow, src, src.getBounds());
+    }
+    bar.setBrand (juce::roundToInt (titleWidth()), [this] (juce::Graphics& g, juce::Rectangle<float> area) { paintTitle (g, area); });
+
+    // Licence : pastille (dans la barre) et page d'activation, par-dessus tout le reste.
+    licenseOverlay = std::make_unique<license::Overlay> ("ONIRIQUE VOCAL SPACER", processor.license);
+    addAndMakeVisible (*licenseOverlay);
+
+    // redimensionnable, proportions verrouillées : aucune déformation, aucun texte coupé.
+    // La taille mémorisée est lue AVANT tout appel qui redimensionne : setResizeLimits() déclenche un
+    // resized() à la taille minimale, qui écrasait la largeur sauvegardée (le plugin se rouvrait petit).
+    const int w = window::openingSize (processor.apvts.state, "ONIRIQUE VOCAL SPACER", { 1280, heightFor (1280) },
+                                       { kMinW, heightFor (kMinW) }, { kMaxW, heightFor (kMaxW) }).x;
+    setResizable (true, true);
+    setResizeLimits (kMinW, heightFor (kMinW), kMaxW, heightFor (kMaxW));
+    if (auto* c = getConstrainer()) c->setFixedAspectRatio (1.0 / (double) kHeightPerWidth);
+    setSize (w, heightFor (w));
+    restoringSize = false;
+    window::remember (processor.apvts.state, getWidth(), getHeight());
+    resized();
+
+   #if ONIRIQUE_UI_TEST
+    // essais locaux uniquement : sans la page d'activation, le navigateur ou le menu ouverts, et une image de l'interface
+    // (ONIRIQUE_UI_PNG=fichier.png, rendue x2 par le moteur logiciel de JUCE)
+    const auto test = juce::SystemStats::getEnvironmentVariable ("ONIRIQUE_UI_TEST", {});
+    if (test.contains ("nolicense")) licenseOverlay->setVisible (false);
+    if (const auto png = juce::SystemStats::getEnvironmentVariable ("ONIRIQUE_UI_PNG", {}); png.isNotEmpty())
+    {
+        juce::Component::SafePointer<OniriqueVocalSpacerAudioProcessorEditor> safe (this);
+        juce::Timer::callAfterDelay (1500, [safe, png, test]
+        {
+            if (safe == nullptr) return;
+            if (test.contains ("browser")) safe->bar.openBrowser();
+            if (test.contains ("menu")) safe->bar.openMenu();
+            juce::Timer::callAfterDelay (400, [safe, png]
+            {
+                if (safe == nullptr) return;
+                juce::Image img (juce::Image::ARGB, safe->getWidth() * 2, safe->getHeight() * 2, true, juce::SoftwareImageType());
+                {
+                    juce::Graphics g2 (img);
+                    g2.addTransform (juce::AffineTransform::scale (2.0f));
+                    safe->paintEntireComponent (g2, true);
+                }
+                juce::File f (png);
+                f.deleteFile();
+                if (auto os = f.createOutputStream()) juce::PNGImageFormat().writeImageToStream (img, *os);
+            });
+        });
+    }
+   #endif
+
+    startTimerHz (30);   // le logo respire
+}
+
+OniriqueVocalSpacerAudioProcessorEditor::~OniriqueVocalSpacerAudioProcessorEditor()
+{
+    stopTimer();
+    window::rememberOnThisComputer ("ONIRIQUE VOCAL SPACER", getWidth(), getHeight());
+}
+
+void OniriqueVocalSpacerAudioProcessorEditor::resized()
+{
+    const float u = (float) getWidth() / kBaseW, b = (float) getWidth() / kBarUnits;
+    view.setBounds (0, juce::roundToInt (kBarH * b - kHeaderCut * u), getWidth(), juce::roundToInt (kBaseH * u));
+
+    bar.setPillWidth (licenseOverlay != nullptr ? licenseOverlay->pillWidth() : 0);
+    bar.place (b, getLocalBounds());
+    if (licenseOverlay != nullptr)
+        licenseOverlay->fit (getLocalBounds(), b, bar.getPillArea(), juce::Justification::centredRight);
+
+    if (! restoringSize)
+        window::remember (processor.apvts.state, getWidth(), getHeight());   // taille mémorisée avec le projet
+}
+
+float OniriqueVocalSpacerAudioProcessorEditor::titleWidth() const
+{
+    const float k = kTitleScale;
+    const auto f1 = ui::font (ui::Face::display, 30.0f * k, true, 0.10f);
+    return (kOldLogoW + 14.0f) * k + ui::textWidth (f1, "ONIRIQUE") + 2.0f + 10.0f * k + ui::textWidth (f1, "VOCAL SPACER") + 6.0f;
+}
+
+// Le titre tel qu'il était en tête de l'interface (logo à la lueur braise qui respire, ONIRIQUE VOCAL SPACER) :
+// x et y sont ceux de l'ancien en-tête, ramenés dans la zone de la marque de la barre.
+void OniriqueVocalSpacerAudioProcessorEditor::paintTitle (juce::Graphics& g, juce::Rectangle<float> area) const
+{
+    const float k = kTitleScale;
+    auto X = [&] (float oldX) { return area.getX() + (oldX - kOldLogoX) * k; };
+    auto Y = [&] (float oldY) { return kBarH * 0.5f + (oldY - kOldCentreY) * k; };
+
+    const auto logoRect = juce::Rectangle<float> (X (kOldLogoX), Y (10.0f), kOldLogoW * k, 64.0f * k);
+    if (logo.isValid())
+    {
+        const float t = (float) (juce::Time::getMillisecondCounterHiRes() * 0.001);
+        const float breathe = 0.5f + 0.5f * std::sin (t * 2.0f * kPi / 5.0f);
+        const float pad = logoRect.getHeight() / 4.0f;
+        g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+        g.setColour (ui::ember.withAlpha (0.55f + 0.35f * breathe));
+        g.drawImage (logoGlow, logoRect.expanded (pad), juce::RectanglePlacement::stretchToFit, true);
+        g.setColour (juce::Colours::white.withAlpha (0.08f + 0.10f * breathe));
+        g.drawImage (logoGlow, logoRect.expanded (pad), juce::RectanglePlacement::stretchToFit, true);
+        g.setOpacity (1.0f);
+        g.drawImage (logo, logoRect, juce::RectanglePlacement::stretchToFit);
+    }
+
+    const float x = logoRect.getRight() + 14.0f * k;
+    const auto f1 = ui::font (ui::Face::display, 30.0f * k, true, 0.10f);
+    const float w1 = ui::textWidth (f1, "ONIRIQUE") + 2.0f;
+    const float w2 = ui::textWidth (f1, "VOCAL SPACER") + 2.0f;
+    const float y = Y (12.0f), hh = 36.0f * k;
+    g.setFont (f1);
+    g.setColour (ui::mist);
+    g.drawText ("ONIRIQUE", juce::Rectangle<float> (x, y, w1, hh), juce::Justification::centredLeft, false);
+    g.setColour (ui::ember);
+    g.drawText ("VOCAL SPACER", juce::Rectangle<float> (x + w1 + 10.0f * k, y, w2 + 20.0f * k, hh), juce::Justification::centredLeft, false);
+}
+
+void OniriqueVocalSpacerAudioProcessorEditor::timerCallback()
+{
+    // le logo respire : seule la zone du titre se redessine
+    bar.repaint (bar.getBrandArea().withY (0).withHeight ((int) kBarH).expanded (10, 0));
 }

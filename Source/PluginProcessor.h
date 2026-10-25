@@ -8,7 +8,7 @@
 #include "DSP/SpacerChain.h"
 #include "DSP/SpectrumTap.h"
 #include "DSP/SidechainGuard.h"
-#include "PresetManager.h"
+#include "StockPresets.h"
 
 class OniriqueVocalSpacerAudioProcessor : public juce::AudioProcessor
 {
@@ -43,7 +43,9 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     juce::AudioProcessorValueTreeState apvts;
-    onirique::PresetManager presets { apvts };
+    /** Les presets d'usine et ceux de l'utilisateur, la comparaison A/B : ce que montre la barre du haut. */
+    onirique::PresetBank presets { apvts, "VocalSpacer", onirique::spacer::stockPresets(), onirique::spacer::tagNames(),
+                                   onirique::spacer::notStored() };
     onirique::SpectrumTap inputTap, outputTap, vocalTap;   // afficheur de la poche : instrumental entrée / sortie, voix (mono)
 
     // ---- lus par l'éditeur (thread GUI)

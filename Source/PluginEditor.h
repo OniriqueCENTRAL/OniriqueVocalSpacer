@@ -2,6 +2,7 @@
 
 #include "License/LicenseOverlay.h"
 #include "PluginProcessor.h"
+#include "ui/OniriqueBar.h"
 
 #include <array>
 #include <map>
@@ -221,36 +222,6 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SegmentSelector)
 };
 
-// Barre de presets (en-tête) : précédent / nom (menu) / suivant + SAVE (champ de nom intégré).
-class PresetBar : public juce::Component, public Animated
-{
-public:
-    explicit PresetBar (onirique::PresetManager&);
-
-    void paint (juce::Graphics&) override;
-    void resized() override;
-    void tick() override;
-    void mouseDown (const juce::MouseEvent&) override;
-    void mouseMove (const juce::MouseEvent&) override;
-    void mouseExit (const juce::MouseEvent&) override;
-
-private:
-    enum Zone { none = -1, prev, name, next, save };
-    Zone zoneAt (juce::Point<float>) const noexcept;
-    void showMenu();
-    void startSave();
-    void endSave (bool commit);
-
-    onirique::PresetManager& pm;
-    juce::TextEditor editor;
-    juce::Rectangle<float> zones[4];
-    juce::String shownName;
-    bool modified = false;
-    Zone hover = none;
-    float glow[4] {};
-    int frame = 0;
-};
-
 // Mètre de niveau vertical stéréo (L / R) : crête, retombée douce, maintien, valeur crête (clic = remise à zéro).
 class LevelMeter : public juce::Component, public juce::SettableTooltipClient, public Animated
 {
@@ -359,12 +330,12 @@ private:
     int write = 0, frame = 0;
 };
 
-class OniriqueVocalSpacerAudioProcessorEditor : public juce::AudioProcessorEditor,
-                                                private juce::Timer
+class SpacerView : public juce::Component,
+                   private juce::Timer
 {
 public:
-    explicit OniriqueVocalSpacerAudioProcessorEditor (OniriqueVocalSpacerAudioProcessor&);
-    ~OniriqueVocalSpacerAudioProcessorEditor() override;
+    explicit SpacerView (OniriqueVocalSpacerAudioProcessor&);
+    ~SpacerView() override;
 
     void paint (juce::Graphics&) override;
     void paintVeils (juce::Graphics&);
@@ -385,7 +356,6 @@ private:
     void timerCallback() override;
     float scale() const noexcept;
     void paintHeader (juce::Graphics&);
-    void paintStar (juce::Graphics&, juce::Point<float> c, float r, float alpha);
     void paintScStatus (juce::Graphics&);
     // fond et cartes ne bougent pas : dessinés une fois (à la résolution réelle de l'écran) dans deux images,
     // recopiées à chaque image ; seuls l'en-tête animé, les points des cartes et les témoins sont redessinés
@@ -455,24 +425,19 @@ private:
     LevelMeter inMeter  { [this] (int c) { return processor.consumeInputLevel (c); } };
     LevelMeter outMeter { [this] (int c) { return processor.consumeOutputLevel (c); } };
     PillToggle autoButton   { "AUTO GAIN", PillToggle::Style::big };
-    PillToggle bypassButton { "BYPASS", PillToggle::Style::small };
-    std::unique_ptr<ButtonAttachment> autoAttachment, bypassAttachment;
-    PresetBar presetBar { processor.presets };
+    std::unique_ptr<ButtonAttachment> autoAttachment;
 
     PowerButton spacePower, pocketPower, restorePower;
     std::unique_ptr<ButtonAttachment> spacePowerAtt, pocketPowerAtt, restorePowerAtt;
 
     std::vector<Animated*> animated;
     std::vector<Section> sections;
-    juce::Image logo, logoScaled, logoGlow;
     juce::Image backdropLayer, cardsLayer;   // vidées au redimensionnement
     float layersScale = 0.0f;
-    juce::Rectangle<float> logoRect, signalRect, overRect, scStatusRect, scMeterTitle;
-    std::vector<std::pair<juce::Point<float>, float>> stars;
+    juce::Rectangle<float> signalRect, overRect, scStatusRect, scMeterTitle;
     double clock = 0.0;
     int overHold = 0, frame = 0;
     float overGlow = 0.0f, scGlow = 0.0f, staticAmt = 0.0f;
-    bool restoringSize = true;
 
     // Couche transparente au-dessus des modules pour les voiles des modules coupés ; laisse passer les clics.
     struct Overlay : juce::Component
@@ -482,7 +447,31 @@ private:
         void paint (juce::Graphics& g) override { if (draw) draw (g); }
     } veils;
 
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SpacerView)
+};
+
+// La fenêtre du plugin : la barre du haut des plugins ONIRIQUE (le titre, les presets, IN, A/B, copier / coller, la
+// licence, la taille de la fenêtre), et l'interface dessous. Les deux se zooment ensemble.
+class OniriqueVocalSpacerAudioProcessorEditor : public juce::AudioProcessorEditor, private juce::Timer
+{
+public:
+    explicit OniriqueVocalSpacerAudioProcessorEditor (OniriqueVocalSpacerAudioProcessor&);
+    ~OniriqueVocalSpacerAudioProcessorEditor() override;
+
+    void paint (juce::Graphics&) override {}
+    void resized() override;
+
+private:
+    void timerCallback() override;
+    float titleWidth() const;
+    void paintTitle (juce::Graphics&, juce::Rectangle<float> area) const;   // le titre, dans la barre (en points)
+
+    OniriqueVocalSpacerAudioProcessor& processor;
+    SpacerView view;
+    onirique::nuit::Bar bar;
+    juce::Image logo, logoGlow;   // le logo du titre et sa lueur, qui respire
     std::unique_ptr<onirique::license::Overlay> licenseOverlay;
+    bool restoringSize = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OniriqueVocalSpacerAudioProcessorEditor)
 };
