@@ -814,8 +814,8 @@ void SegmentSelector::paint (juce::Graphics& g)
     juce::Path pp;
     pp.addRoundedRectangle (pill, pill.getHeight() * 0.5f);
     ui::strokeGlow (g, pp, ui::ember, 1.0f * u, 0.6f * dim);
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xffEE4555).withMultipliedAlpha (dim), pill.getX(), pill.getY(),
-                                             juce::Colour (0xffB81F30).withMultipliedAlpha (dim), pill.getX(), pill.getBottom(), false));
+    g.setGradientFill (juce::ColourGradient (onirique::look::tint (0xffEE4555).withMultipliedAlpha (dim), pill.getX(), pill.getY(),
+                                             onirique::look::tint (0xffB81F30).withMultipliedAlpha (dim), pill.getX(), pill.getBottom(), false));
     g.fillPath (pp);
 
     // une seule taille de texte pour tous les choix, qui tient dans la pastille (ronde si le segment est étroit)
@@ -908,7 +908,7 @@ void LevelMeter::paint (juce::Graphics& g)
         const float top = yOf (levelDb[c]);
         if (top < bar.getBottom() - 0.5f)
         {
-            juce::ColourGradient cg (ui::bone.withAlpha (0.30f), 0.0f, bar.getBottom(), juce::Colour (0xffff2a3a), 0.0f, yOf (2.0f), false);
+            juce::ColourGradient cg (ui::bone.withAlpha (0.30f), 0.0f, bar.getBottom(), onirique::look::tint (0xffff2a3a), 0.0f, yOf (2.0f), false);
             cg.addColour ((double) norm (-12.0f), ui::bone.withAlpha (0.85f));   // positions = niveau normalisé (bas = -60, haut = +2)
             cg.addColour ((double) norm (-3.0f), ui::ember);
             g.setGradientFill (cg);
@@ -917,7 +917,7 @@ void LevelMeter::paint (juce::Graphics& g)
         // maintien de crête
         if (holdDb[c] > -60.0f)
         {
-            g.setColour (holdDb[c] > 0.0f ? juce::Colour (0xffff2a3a) : ui::bone);
+            g.setColour (holdDb[c] > 0.0f ? onirique::look::tint (0xffff2a3a) : ui::bone);
             g.fillRect (juce::Rectangle<float> (bar.getX() + 1.0f, yOf (holdDb[c]) - 1.0f * u, bar.getWidth() - 2.0f, 2.0f * u));
         }
     }
@@ -926,7 +926,7 @@ void LevelMeter::paint (juce::Graphics& g)
     const juce::String txt = maxDb <= -99.0f ? juce::String ("-inf") : (maxDb > 0.0f ? "+" : "") + juce::String (maxDb, 1);
     g.setColour (juce::Colours::black.withAlpha (0.4f));
     g.fillRoundedRectangle (readout, readout.getHeight() * 0.5f);
-    g.setColour (maxDb > 0.0f ? juce::Colour (0xffff2a3a) : ui::line);
+    g.setColour (maxDb > 0.0f ? onirique::look::tint (0xffff2a3a) : ui::line);
     g.drawRoundedRectangle (readout.reduced (0.5f), readout.getHeight() * 0.5f, 1.0f);
     g.setColour (maxDb > 0.0f ? ui::bone : ui::mist);
     g.setFont (ui::fitFont (ui::Face::mono, readout.getHeight() * 0.62f, readout.getWidth() - 6.0f * u, txt, true));
@@ -2086,6 +2086,13 @@ void OniriqueVocalSpacerAudioProcessorEditor::paintTitle (juce::Graphics& g, juc
 
 void OniriqueVocalSpacerAudioProcessorEditor::timerCallback()
 {
+    // la couleur de l'interface (menu ⋯, ou changée dans un autre plugin ONIRIQUE) : caches vidés, tout se redessine
+    if (onirique::look::changedSince (themeSeen))
+    {
+        
+        std::function<void (juce::Component&)> all = [&all] (juce::Component& k) { k.repaint(); for (auto* ch : k.getChildren()) all (*ch); };
+        all (*this);
+    }
     // le logo respire : seule la zone du titre se redessine
     bar.repaint (bar.getBrandArea().withY (0).withHeight ((int) kBarH).expanded (10, 0));
 }

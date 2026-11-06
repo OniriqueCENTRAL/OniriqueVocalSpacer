@@ -1,4 +1,15 @@
 #pragma once
+#if __has_include ("ui/OniriqueTheme.h")
+ #include "ui/OniriqueTheme.h"
+#elif __has_include ("UI/OniriqueTheme.h")
+ #include "UI/OniriqueTheme.h"
+#elif __has_include ("GUI/OniriqueTheme.h")
+ #include "GUI/OniriqueTheme.h"
+#elif __has_include ("../License/OniriqueTheme.h")
+ #include "../License/OniriqueTheme.h"
+#else
+ #include "OniriqueTheme.h"
+#endif
 
 #include "License/LicenseOverlay.h"
 #include "PluginProcessor.h"
@@ -14,13 +25,13 @@ namespace onirique::ui
 // blanc cassé pour les textes, gris doux pour le secondaire. Pas de néon : des lueurs discrètes, du verre sombre.
 // (Les noms historiques sont gardés : « ember » est l'accent, « lilac » le reflet clair.)
 inline const juce::Colour night  { 0xff09080A };   // noir profond (fond)
-inline const juce::Colour blood  { 0xff3D0910 };   // rouge sombre (dégradés, profondeur)
+inline const juce::Colour& blood = onirique::look::litBottom;   // rouge sombre (dégradés, profondeur)
 inline const juce::Colour deep   { 0xff121012 };   // charbon très sombre (panneaux)
 inline const juce::Colour deep2  { 0xff1C1517 };   // charbon chaud (menus, info-bulles, panneaux ouverts)
 inline const juce::Colour mist   { 0xffF2ECEC };   // blanc cassé (textes)
 inline const juce::Colour haze   { 0xff978C8F };   // gris doux (informations secondaires)
-inline const juce::Colour ember  { 0xffE5384A };   // rouge ONIRIQUE (accent)
-inline const juce::Colour lilac  { 0xffFFB3BC };   // rose pâle (queues de reverb, reflets, extrémités d'arcs)
+inline const juce::Colour& ember = onirique::look::ember;   // rouge ONIRIQUE (accent)
+inline const juce::Colour& lilac = onirique::look::emberPink;   // rose pâle (queues de reverb, reflets, extrémités d'arcs)
 inline const juce::Colour bone   { 0xffFFF4F5 };   // blanc le plus clair (aiguilles, crêtes)
 inline const juce::Colour mint   { 0xff7DE3B6 };   // témoin discret « ça agit » (comme le voyant d'un rack)
 inline const juce::Colour rose   { 0xffFF9AA4 };   // la voix (sidechain) dans les afficheurs
@@ -469,6 +480,7 @@ private:
     OniriqueVocalSpacerAudioProcessor& processor;
     SpacerView view;
     onirique::nuit::Bar bar;
+    int themeSeen = -1;   // la couleur de l'interface déjà dessinée (OniriqueTheme.h)
     juce::Image logo, logoGlow;   // le logo du titre et sa lueur, qui respire
     std::unique_ptr<onirique::license::Overlay> licenseOverlay;
     bool restoringSize = true;
