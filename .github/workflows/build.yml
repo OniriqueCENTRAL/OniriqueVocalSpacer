@@ -14,8 +14,6 @@ env:
 
 jobs:
   mac:
-    # EN PAUSE (05/11/2026) : le Mac se compile sur une vraie machine Mac de l'équipe ; enlever « if: false » pour le rallumer
-    if: false
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -59,10 +57,12 @@ jobs:
         with: { name: win, path: dist/win }
 
   publish:
-    needs: [windows]
+    needs: [mac, windows]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/download-artifact@v4
+        with: { name: mac, path: version/mac }
       - uses: actions/download-artifact@v4
         with: { name: win, path: version/win }
       - name: Publier dans ONIRIQUE CENTRAL
