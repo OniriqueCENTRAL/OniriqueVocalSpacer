@@ -20,7 +20,8 @@ jobs:
       - name: Compiler (universel arm64 + x86_64)
         run: |
           cmake -B build -G Xcode
-          cmake --build build --config Release -- -quiet
+          # VST3 et AU seulement : l'app autonome (Standalone) n'est pas publiée et doublait le temps de compilation
+          cmake --build build --config Release --target "${TARGET}_VST3" "${TARGET}_AU" -- -quiet
       - name: Signer (ad hoc) et empaqueter
         run: |
           OUT="build/${TARGET}_artefacts/Release"
@@ -31,14 +32,8 @@ jobs:
           # Format ONIRIQUE CENTRAL : « NOM.vst3.zip » avec NOM.vst3 et NOM.component à la racine.
           mkdir -p dist/mac
           (cd central && ditto -c -k . "../dist/mac/$PRODUCT.vst3.zip")
-          if [ -d "$OUT/Standalone/$PRODUCT.app" ]; then
-            codesign --force --deep --sign - "$OUT/Standalone/$PRODUCT.app"
-            (cd "$OUT/Standalone" && ditto -c -k --keepParent "$PRODUCT.app" "$GITHUB_WORKSPACE/$PRODUCT Standalone.zip")
-          fi
       - uses: actions/upload-artifact@v4
         with: { name: mac, path: dist/mac }
-      - uses: actions/upload-artifact@v4
-        with: { name: mac-standalone, path: "*Standalone.zip", if-no-files-found: ignore }
 
   windows:
     runs-on: windows-latest
